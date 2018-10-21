@@ -1,21 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Builder;
+﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Razor;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
+using System.IO;
 
 namespace DummyFileBasedCms.Web
 {
-    using Microsoft.AspNetCore.Mvc.ApplicationModels;
-    using Microsoft.Extensions.Options;
-    using MvcInfrastructureStuff;
-
     public class Startup
     {
         public Startup( IConfiguration configuration )
@@ -25,24 +19,37 @@ namespace DummyFileBasedCms.Web
 
         public IConfiguration Configuration { get; }
 
-        // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices( IServiceCollection services )
         {
-            services.Configure<FlatFileCmsGitOptions>( Configuration.GetSection( "FlatFileCmsGit" ) );
+            // Contruct an options instance so we can use it to configure things in startup.
+            var cmsOptions = new FlatFileCmsGitOptions();
+            Configuration.Bind("FlatFileCmsGit", cmsOptions);
 
-            var flatFileCmsOptions = services.BuildServiceProvider().GetService<IOptions<FlatFileCmsGitOptions>>()?.Value;
-            var fileProvider = new PhysicalFileProvider(flatFileCmsOptions.FilePath);
+            // Bind the configuration in DI so it's accessible to services.
+            services.Configure<FlatFileCmsGitOptions>("FlatFileCmsGit", Configuration);
 
-            services.AddSingleton(fileProvider);
-            services.AddTransient<FlatFileCmsProviderRazorProjectFileSystem>();
-            services.AddSingleton<IPageRouteModelProvider, FlatFileCmsRazorProjectPageRouteModelProvider>();
+            // Adding a changing file providers here changes were MVC looks for views/pages. If you need
+            // to get the file provider(s) from DI you can resolve IRazorViewEngineFileProviderAccessor from
+            // DI
+            services.Configure<RazorViewEngineOptions>(options =>
+            {
+                // You'll need to decide if you want to include files in the application's directory
+                // or not.
+                // options.FileProviders.Clear();
+
+                // File Providers throw if the directory doesn't exist. 
+                if (Directory.Exists(cmsOptions.FilePath))
+                {
+                    options.FileProviders.Add(new PhysicalFileProvider(cmsOptions.FilePath));
+                }
+            });
 
             services.Configure<CookiePolicyOptions>( options =>
-                                                     {
-                                                         // This lambda determines whether user consent for non-essential cookies is needed for a given request.
-                                                         options.CheckConsentNeeded = context => true;
-                                                         options.MinimumSameSitePolicy = SameSiteMode.None;
-                                                     } );
+            {
+                // This lambda determines whether user consent for non-essential cookies is needed for a given request.
+                options.CheckConsentNeeded = context => true;
+                options.MinimumSameSitePolicy = SameSiteMode.None;
+            } );
 
 
             services.AddMvc()
