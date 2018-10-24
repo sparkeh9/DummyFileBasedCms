@@ -28,22 +28,6 @@ namespace DummyFileBasedCms.Web
             // Bind the configuration in DI so it's accessible to services.
             services.Configure<FlatFileCmsGitOptions>("FlatFileCmsGit", Configuration);
 
-            // Adding a changing file providers here changes were MVC looks for views/pages. If you need
-            // to get the file provider(s) from DI you can resolve IRazorViewEngineFileProviderAccessor from
-            // DI
-            services.Configure<RazorViewEngineOptions>(options =>
-            {
-                // You'll need to decide if you want to include files in the application's directory
-                // or not.
-                // options.FileProviders.Clear();
-
-                // File Providers throw if the directory doesn't exist. 
-                if (Directory.Exists(cmsOptions.FilePath))
-                {
-                    options.FileProviders.Add(new PhysicalFileProvider(cmsOptions.FilePath));
-                }
-            });
-
             services.Configure<CookiePolicyOptions>( options =>
             {
                 // This lambda determines whether user consent for non-essential cookies is needed for a given request.
@@ -51,10 +35,25 @@ namespace DummyFileBasedCms.Web
                 options.MinimumSameSitePolicy = SameSiteMode.None;
             } );
 
-
             services.AddMvc()
-                    .SetCompatibilityVersion( CompatibilityVersion.Version_2_1 )
-                    .AddRazorPagesOptions( o => { o.AllowAreas = true; } );
+                .SetCompatibilityVersion(CompatibilityVersion.Version_2_1)
+                .AddRazorPagesOptions(o =>
+                {
+                    o.AllowAreas = true;
+                    o.RootDirectory = "/"; // Look starting at the root instead of in /Pages
+                })
+                .AddRazorOptions(options =>
+                {
+                    // Order matters with options. Putting this after AddMvc will result in
+                    // the expected ordering of file providers.
+                    foreach (var directory in cmsOptions.Directories)
+                    {
+                        if (Directory.Exists(directory.FilePath))
+                        {
+                            options.FileProviders.Add(new PhysicalFileProvider(directory.FilePath));
+                        }
+                    }
+                });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
